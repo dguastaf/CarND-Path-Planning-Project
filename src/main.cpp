@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -196,8 +197,13 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
-                     uWS::OpCode opCode) {
+  h.onMessage([&map_waypoints_x, 
+  			   &map_waypoints_y, 
+			   &map_waypoints_s,
+               &map_waypoints_dx,
+			   &map_waypoints_dy] (uWS::WebSocket<uWS::SERVER> ws, 
+			   					   char *data, size_t length,
+								   uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -238,6 +244,46 @@ int main() {
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
 
+			std::cout << j[1] << "\n" << std::endl;
+
+			// TODO use cost function to determine the spacing between points
+			// cost might be something like:
+			// (speed - target_speed) / target_speed)
+
+			int end = 50;
+			int inc = 5;
+
+			// temporary arrays that hold a couple waypoints which we will use to extrapolate the car's path
+			vector<double> temp_x(end/inc), temp_y(end/inc);
+
+			// generates 10 points for future extrapolation
+			for (int i = 0; i < 50; i += 5) {
+				// increment the current s coordinate
+				double s1 = car_s + i * 0.45;
+				
+				// generate cartesian coords from freenet
+				vector<double> xy = getXY(s1, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+				std::cout << xy[0] << " " << xy[1] << "\n" << std::endl;
+				
+				temp_x.push_back(xy[0]);
+				temp_y.push_back(xy[1]);
+			}
+
+			tk::spline s;
+			s.set_points(temp_x, temp_y);
+
+			// get cartesian coordinates from the spline, gererating a smooth trajectory
+			for (int i = 0; i < 50; i++) {
+				// now what?
+			}
+
+
+
+			// double dist_inc = 0.5;
+			// for (int i = 0; i < 50; i++) {
+			// 	next_x_vals.push_back(car_x + (dist_inc * i) * cos(deg2rad(car_yaw)));
+			// 	next_y_vals.push_back(car_y + (dist_inc * i) * sin(deg2rad(car_yaw)));
+			// }
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;
