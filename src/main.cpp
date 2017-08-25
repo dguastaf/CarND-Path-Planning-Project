@@ -197,9 +197,9 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 	int lane = 1;
-	double ref_vel = 49.5; //mph
+	double ref_vel = 0; //mph
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,lane,ref_vel](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane,&ref_vel](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -237,6 +237,81 @@ int main() {
           	auto sensor_fusion = j[1]["sensor_fusion"];
 
 						int prev_size = previous_path_x.size();
+
+						if (prev_size > 0) {
+							car_s = end_path_s;
+						}
+
+						bool too_close = false;
+
+						/*
+							Sensor fusion info
+							0. car's unique ID
+							1. car's x position in map coordinates
+							2. car's y position in map coordinates
+							3. car's x velocity in m/s
+							4. car's y velocity in m/s
+							5. car's s position in frenet coordinates
+							6. car's d position in frenet coordinates
+						*/
+						for (int i = 0; i < sensor_fusion.size(); i++) {
+							float d = sensor_fusion[i][6];
+							
+							// Check if car is in your lane 
+							if (d < (2+4*lane+2) && d > (2+4*lane-2)) {
+								double vx = sensor_fusion[i][3];
+								double vy = sensor_fusion[i][4];
+								double check_speed = sqrt(vx*vx+vy*vy);
+								double check_car_s = sensor_fusion[i][5];
+
+								check_car_s+=((double)prev_size*.02*check_speed);
+
+								if ((check_car_s > car_s) && (check_car_s - car_s) < 30) {
+									too_close = true;
+								}
+							}
+						}
+
+						if (too_close) {
+							//try and change lanes
+							bool canMergeLeft = lane > 0;
+							bool canMergeRight = lane < 2;
+
+							for (int i = 0; i < sensor_fusion.size(); i++) {
+								float d = sensor_fusion[i][6];
+								double vx = sensor_fusion[i][3];
+								double vy = sensor_fusion[i][4];
+								double check_speed = sqrt(vx*vx+vy*vy);
+								double check_car_s = sensor_fusion[i][5];
+								check_car_s+=((double)prev_size*.02*check_speed);
+
+								//try merging left
+								int ref_lane = lane - 1;
+								if (canMergeLeft && d < (2+4*ref_lane+2) && d > (2+4*ref_lane-2)) {
+									if (abs(check_car_s - car_s) < 20) {
+										canMergeLeft = false;
+									}
+								} 
+								
+								//try merging right
+								ref_lane = lane + 1;
+								if (canMergeRight && d < (2+4*ref_lane+2) && d > (2+4*ref_lane-2)) {
+									if (abs(check_car_s - car_s) < 20) {
+										canMergeRight = false;
+									}
+								}
+							}
+
+							if (canMergeLeft) {
+								lane--;
+							} else if (canMergeRight) {
+								lane++;
+							} else {
+								ref_vel -= .224;
+							}
+						} else if (ref_vel < 49.5) {
+							ref_vel += .224;
+						}
 
 						vector<double> ptsx;
 						vector<double> ptsy;
